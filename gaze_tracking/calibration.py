@@ -1,5 +1,7 @@
 from __future__ import division
 import cv2
+import json
+import os
 from .pupil import Pupil
 
 
@@ -25,9 +27,31 @@ class Calibration(object):
             side: Indicates whether it's the left eye (0) or the right eye (1)
         """
         if side == 0:
-            return int(sum(self.thresholds_left) / len(self.thresholds_left))
+            return int(sum(self.thresholds_left) / len(self.thresholds_left)) if self.thresholds_left else 30
         elif side == 1:
-            return int(sum(self.thresholds_right) / len(self.thresholds_right))
+            return int(sum(self.thresholds_right) / len(self.thresholds_right)) if self.thresholds_right else 30
+
+    def reset(self):
+        """Resets the calibration data"""
+        self.thresholds_left = []
+        self.thresholds_right = []
+
+    def save(self, filename="calibration.json"):
+        """Saves the calibration data to a file"""
+        data = {
+            "thresholds_left": self.thresholds_left,
+            "thresholds_right": self.thresholds_right
+        }
+        with open(filename, "w") as f:
+            json.dump(data, f)
+
+    def load(self, filename="calibration.json"):
+        """Loads the calibration data from a file"""
+        if os.path.exists(filename):
+            with open(filename, "r") as f:
+                data = json.load(f)
+                self.thresholds_left = data.get("thresholds_left", [])
+                self.thresholds_right = data.get("thresholds_right", [])
 
     @staticmethod
     def iris_size(frame):
@@ -37,6 +61,9 @@ class Calibration(object):
         Argument:
             frame (numpy.ndarray): Binarized iris frame
         """
+        if frame is None or frame.size == 0:
+            return 0.48  # Default value if frame is invalid
+
         frame = frame[5:-5, 5:-5]
         height, width = frame.shape[:2]
         nb_pixels = height * width
@@ -51,10 +78,13 @@ class Calibration(object):
         Argument:
             eye_frame (numpy.ndarray): Frame of the eye to be analyzed
         """
+        if eye_frame is None or eye_frame.size == 0:
+            return 30  # Default threshold if frame is invalid
+
         average_iris_size = 0.48
         trials = {}
 
-        for threshold in range(5, 100, 5):
+        for threshold in range(5, 100, 10):  # Reduced step size for performance
             iris_frame = Pupil.image_processing(eye_frame, threshold)
             trials[threshold] = Calibration.iris_size(iris_frame)
 
@@ -69,6 +99,9 @@ class Calibration(object):
             eye_frame (numpy.ndarray): Frame of the eye
             side: Indicates whether it's the left eye (0) or the right eye (1)
         """
+        if eye_frame is None or eye_frame.size == 0:
+            return
+
         threshold = self.find_best_threshold(eye_frame)
 
         if side == 0:

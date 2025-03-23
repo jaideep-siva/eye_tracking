@@ -2,6 +2,7 @@ from __future__ import division
 import os
 import cv2
 import dlib
+import time
 from .eye import Eye
 from .calibration import Calibration
 
@@ -10,7 +11,8 @@ class GazeTracking(object):
     """
     This class tracks the user's gaze.
     It provides useful information like the position of the eyes
-    and pupils and allows to know if the eyes are open or closed
+    and pupils and allows to know if the eyes are open or closed.
+    It also tracks the duration of eye closure and provides gaze direction in 15-degree increments.
     """
 
     def __init__(self):
@@ -18,6 +20,8 @@ class GazeTracking(object):
         self.eye_left = None
         self.eye_right = None
         self.calibration = Calibration()
+        self.eye_closed_start_time = None
+        self.eye_closed_duration = 0
 
         # _face_detector is used to detect faces
         self._face_detector = dlib.get_frontal_face_detector()
@@ -61,6 +65,16 @@ class GazeTracking(object):
         """
         self.frame = frame
         self._analyze()
+
+        # Update eye closure duration
+        if self.is_blinking():
+            if self.eye_closed_start_time is None:
+                self.eye_closed_start_time = time.time()
+            else:
+                self.eye_closed_duration = time.time() - self.eye_closed_start_time
+        else:
+            self.eye_closed_start_time = None
+            self.eye_closed_duration = 0
 
     def pupil_left_coords(self):
         """Returns the coordinates of the left pupil"""
@@ -109,13 +123,31 @@ class GazeTracking(object):
     def is_center(self):
         """Returns true if the user is looking to the center"""
         if self.pupils_located:
-            return self.is_right() is not True and self.is_left() is not True
+            return not self.is_right() and not self.is_left()
 
     def is_blinking(self):
         """Returns true if the user closes his eyes"""
         if self.pupils_located:
             blinking_ratio = (self.eye_left.blinking + self.eye_right.blinking) / 2
             return blinking_ratio > 3.8
+
+    def eyes_closed_duration(self):
+        """Returns the duration in seconds that the eyes have been closed"""
+        return self.eye_closed_duration
+
+    def gaze_direction_in_degrees(self):
+        """Returns the gaze direction in 15-degree increments"""
+        if self.pupils_located:
+            ratio = self.horizontal_ratio()
+            if ratio <= 0.35:
+                return "Right"
+            elif ratio >= 0.65:
+                return "Left"
+            else:
+                # Calculate the angle in 15-degree increments
+                angle = (ratio - 0.35) / 0.3 * 180  # Map ratio to 0-180 degrees
+                angle = round(angle / 15) * 15  # Round to nearest 15 degrees
+                return f"{angle} degrees"
 
     def annotated_frame(self):
         """Returns the main frame with pupils highlighted"""

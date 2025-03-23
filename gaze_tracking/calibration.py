@@ -2,7 +2,7 @@ from __future__ import division
 import cv2
 import json
 import os
-from .pupil import Pupil
+from pupil import Pupil
 
 
 class Calibration(object):
